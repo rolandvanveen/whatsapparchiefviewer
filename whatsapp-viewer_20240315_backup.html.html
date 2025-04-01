@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Archief Viewer</title>
+    <style>
+        :root {
+            --whatsapp-green: #25D366;
+            --whatsapp-light-green: #DCF8C6;
+            --whatsapp-gray: #E5DDD5;
+            --whatsapp-dark-gray: #075E54;
+            --whatsapp-text: #303030;
+            --whatsapp-time: #667781;
+            --whatsapp-sent-message: #DCF8C6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #E5DDD5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: var(--whatsapp-dark-gray);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+        }
+
+        .header .credits {
+            font-size: 0.7em;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        .upload-section {
+            background-color: white;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .status-message {
+            background-color: white;
+            padding: 1rem;
+            text-align: center;
+            color: var(--whatsapp-dark-gray);
+            font-weight: bold;
+            display: none;
+        }
+
+        .status-message.visible {
+            display: block;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .date-divider {
+            text-align: center;
+            margin: 16px 0;
+            position: relative;
+        }
+
+        .date-divider::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 100%;
+            height: 1px;
+            background-color: #e9edef;
+            z-index: 1;
+        }
+
+        .date-divider span {
+            background-color: #f0f2f5;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.8em;
+            color: #667781;
+            position: relative;
+            z-index: 2;
+        }
+
+        .message-group {
+            margin: 8px 0;
+            max-width: 85%;
+        }
+
+        .message-group.sent {
+            margin-left: auto;
+        }
+
+        .message-group.received {
+            margin-right: auto;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 0.8em;
+            color: #667781;
+            opacity: 0.9;
+        }
+
+        .message-sender {
+            font-weight: 500;
+            margin-right: 8px;
+        }
+
+        .message-time {
+            color: #667781;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .message-content {
+            background-color: var(--whatsapp-sent-message);
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .message-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            width: 8px;
+            height: 8px;
+            background-color: var(--whatsapp-sent-message);
+            box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .sent .message-content::before {
+            right: -4px;
+            transform: rotate(45deg);
+        }
+
+        .received .message-content::before {
+            left: -4px;
+            transform: rotate(45deg);
+            background-color: white;
+            box-shadow: -1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .received .message-content {
+            background-color: white;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .media-container {
+            margin: 8px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .media-container img,
+        .media-container video {
+            max-width: 100%;
+            border-radius: 8px;
+            display: block;
+        }
+
+        .media-container::after {
+            content: 'Klik om te bekijken';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 8px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .media-container:hover::after {
+            opacity: 1;
+        }
+
+        .media-container.expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: default;
+        }
+
+        .media-container.expanded img,
+        .media-container.expanded video {
+            max-width: 90%;
+            max-height: 90vh;
+            object-fit: contain;
+        }
+
+        .media-container.expanded::after {
+            display: none;
+        }
+
+        .close-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        .text-file {
+            background: #f0f2f5;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .text-file-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .text-file pre {
+            margin: 0;
+            white-space: pre-wrap;
+            font-family: inherit;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .media-omitted {
+            background: #f0f2f5;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: #667781;
+            font-size: 0.9em;
+        }
+
+        button {
+            background-color: var(--whatsapp-green);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        button:hover {
+            background-color: #128C7E;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .welcome-message {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .welcome-message h2 {
+            color: var(--whatsapp-dark-gray);
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .welcome-message h3 {
+            color: var(--whatsapp-dark-gray);
+            margin: 1.5rem 0 1rem;
+        }
+
+        .welcome-message h4 {
+            color: var(--whatsapp-dark-gray);
+            margin: 1.2rem 0 0.8rem;
+        }
+
+        .welcome-message p {
+            color: #667781;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .welcome-message ul {
+            color: #667781;
+            line-height: 1.5;
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .welcome-message li {
+            margin-bottom: 0.5rem;
+        }
+
+        .instructions {
+            background: #f0f2f5;
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>WhatsApp Archief Viewer 🔍</h1>
+        <div class="credits">gemaakt door rolandvanveen en cursor.ai</div>
+    </div>
+
+    <div class="status-message" id="statusMessage"></div>
+
+    <div class="upload-section">
+        <button onclick="document.getElementById('chatInput').click()">Upload Chat Bestand</button>
+        <input type="file" id="chatInput" accept=".txt">
+        
+        <button onclick="document.getElementById('mediaInput').click()">Upload Media Bestanden</button>
+        <input type="file" id="mediaInput" multiple accept="image/*,video/*,audio/*">
+    </div>
+
+    <div id="chatContainer" class="chat-container">
+        <div class="welcome-message">
+            <h2>Welkom bij de WhatsApp Archief Viewer</h2>
+            <div class="instructions">
+                <h3>Hoe gebruik je deze viewer?</h3>
+                
+                <h4>Stap 1: Upload het chat bestand</h4>
+                <p>Klik op "Selecteer chat bestand" en kies het .txt bestand uit je WhatsApp archief.</p>
+                
+                <h4>Stap 2: Upload media bestanden (optioneel)</h4>
+                <p>Klik op "Selecteer media bestanden" om foto's, video's en andere bijlagen toe te voegen.</p>
+                
+                <h4>Tips voor gebruik:</h4>
+                <ul>
+                    <li>Je kunt bestanden uploaden uit verschillende mappen</li>
+                    <li>Links in berichten zijn automatisch klikbaar</li>
+                    <li>Klik op media bestanden om ze groot te bekijken</li>
+                    <li>Gebruik de "←" knop om terug te gaan naar het gesprek</li>
+                    <li>Als je "Media weggelaten" ziet, betekent dit dat het bestand niet is meegenomen in de export</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const mediaFiles = new Map();
+        const statusMessage = document.getElementById('statusMessage');
+        let currentChatContent = null;
+
+        function showStatus(message) {
+            statusMessage.textContent = message;
+            statusMessage.classList.add('visible');
+        }
+
+        function hideStatus() {
+            statusMessage.classList.remove('visible');
+        }
+
+        // Event listener voor chat bestand
+        document.getElementById('chatInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'text/plain') {
+                showStatus('Chat bestand wordt verwerkt...');
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentChatContent = e.target.result;
+                    processChatFile(currentChatContent);
+                };
+                reader.readAsText(file);
+            } else {
+                showStatus('Selecteer een geldig tekstbestand (.txt)');
+            }
+        });
+
+        // Event listener voor media bestanden
+        document.getElementById('mediaInput').addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                showStatus(`${files.length} bestanden worden verwerkt...`);
+                let processed = 0;
+                
+                for (let file of files) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        // Haal alleen de bestandsnaam uit het pad
+                        const fileName = file.name.split(/[/\\]/).pop();
+                        
+                        if (file.type.startsWith('image/') || 
+                            file.type.startsWith('video/') || 
+                            file.type.startsWith('audio/')) {
+                            // Media bestanden als DataURL opslaan
+                            mediaFiles.set(fileName, e.target.result);
+                        } else if (file.type === 'text/plain') {
+                            // Tekstbestanden als tekst opslaan
+                            mediaFiles.set(fileName, {
+                                type: 'text',
+                                content: e.target.result
+                            });
+                        } else {
+                            showStatus(`Bestand ${file.name} wordt overgeslagen (niet ondersteund formaat)`);
+                        }
+                        
+                        processed++;
+                        if (processed === files.length) {
+                            hideStatus();
+                            if (currentChatContent) {
+                                processChatFile(currentChatContent);
+                            }
+                        }
+                    };
+                    
+                    if (file.type.startsWith('image/') || 
+                        file.type.startsWith('video/') || 
+                        file.type.startsWith('audio/') ||
+                        file.type === 'text/plain') {
+                        reader.readAsDataURL(file);
+                    }
+                }
+            }
+        });
+
+        function processChatFile(content) {
+            const lines = content.split('\n');
+            let currentDate = '';
+            let currentGroup = null;
+            let messages = [];
+            let messageCount = 0;
+
+            for (let line of lines) {
+                // Verbeterde regex die het nummertje verwijdert
+                const match = line.match(/(?:\[)?(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)(?:\])?\s*[-:]\s*([^:]+?)(?:\s*\[\d+\])?\s*:\s*(.+)/);
+                if (match) {
+                    const [_, date, time, sender, message] = match;
+                    
+                    // Normaliseer de datum naar DD-MM-YYYY formaat
+                    const normalizedDate = normalizeDate(date);
+                    
+                    if (normalizedDate !== currentDate) {
+                        if (currentGroup) {
+                            messages.push(currentGroup);
+                        }
+                        currentDate = normalizedDate;
+                        currentGroup = {
+                            date: normalizedDate,
+                            messages: []
+                        };
+                    }
+
+                    // Verbeterde naam opschoning
+                    let cleanSender = sender.trim();
+                    // Verwijder het nummertje als het er staat
+                    cleanSender = cleanSender.replace(/\s*\[\d+\]\s*$/, '');
+                    // Verwijder eventuele dubbele spaties
+                    cleanSender = cleanSender.replace(/\s+/g, ' ');
+
+                    currentGroup.messages.push({
+                        sender: cleanSender,
+                        time: time,
+                        content: message.trim()
+                    });
+                    messageCount++;
+                }
+            }
+
+            if (currentGroup) {
+                messages.push(currentGroup);
+            }
+
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.innerHTML = '';
+            
+            messages.forEach(group => {
+                // Voeg datum toe
+                const dateDiv = document.createElement('div');
+                dateDiv.className = 'date-divider';
+                dateDiv.innerHTML = `<span>${formatDate(group.date)}</span>`;
+                chatContainer.appendChild(dateDiv);
+
+                // Voeg berichten toe
+                group.messages.forEach(message => {
+                    chatContainer.appendChild(createMessageElement(message));
+                });
+            });
+
+            showStatus(`Verwerkt: ${messageCount} berichten`);
+        }
+
+        function normalizeDate(dateStr) {
+            // Converteer verschillende datum formaten naar DD-MM-YYYY
+            const parts = dateStr.split(/[-/.]/);
+            if (parts.length !== 3) return dateStr;
+
+            let [day, month, year] = parts;
+            
+            // Normaliseer naar 4-cijferig jaar
+            if (year.length === 2) {
+                year = parseInt(year) < 50 ? '20' + year : '19' + year;
+            }
+
+            // Zorg dat dag en maand 2 cijfers hebben
+            day = day.padStart(2, '0');
+            month = month.padStart(2, '0');
+
+            return `${day}-${month}-${year}`;
+        }
+
+        function displayMessages(messageGroups) {
+            chatContainer.innerHTML = '';
+            
+            messageGroups.forEach(group => {
+                // Datum scheiding
+                const dateDivider = document.createElement('div');
+                dateDivider.className = 'date-divider';
+                dateDivider.textContent = formatDate(group.date);
+                chatContainer.appendChild(dateDivider);
+
+                // Berichten groep
+                group.messages.forEach(message => {
+                    const messageElement = createMessageElement(message);
+                    chatContainer.appendChild(messageElement);
+                });
+            });
+        }
+
+        function createMessageElement(message) {
+            const div = document.createElement('div');
+            div.className = `message-group ${message.sender === 'Jij' ? 'sent' : 'received'}`;
+            
+            let content = message.content;
+            
+            // Check voor "Media weggelaten" melding
+            if (content.includes('<Media weggelaten>')) {
+                content = content.replace('<Media weggelaten>', 
+                    '<div class="media-omitted">📎 Media bestand niet meegenomen in export</div>');
+            }
+            
+            // Maak links klikbaar
+            content = content.replace(
+                /(https?:\/\/[^\s]+)/g, 
+                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+            );
+            
+            // Verbeterde media attachment detectie
+            const mediaMatch = content.match(/<bijgevoegd: (.+?)>/i);
+            if (mediaMatch) {
+                const mediaFile = mediaMatch[1];
+                
+                // Haal alleen de bestandsnaam uit het pad, ondersteun verschillende scheidingstekens
+                const fileName = mediaFile.split(/[/\\]/).pop();
+                
+                // Zoek het bestand op basis van alleen de bestandsnaam
+                const mediaContent = mediaFiles.get(fileName);
+                
+                // Verwijder de media attachment tekst uit de content
+                content = content.replace(/<bijgevoegd: .+?>/i, '');
+                
+                if (mediaContent) {
+                    if (typeof mediaContent === 'string') {
+                        // Media bestand (afbeelding, video, audio)
+                        const fileType = fileName.split('-')[1]?.toUpperCase() || '';
+                        const extension = fileName.split('.').pop()?.toLowerCase() || '';
+                        
+                        if (fileType.includes('PHOTO') || fileType.includes('STICKER') || 
+                            ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+                            content = `<div class="media-container">
+                                <img src="${mediaContent}" alt="Foto">
+                            </div>${content}`;
+                        } else if (fileType.includes('VIDEO') || 
+                                 ['mp4', 'mov', 'avi', 'webm'].includes(extension)) {
+                            content = `<div class="media-container">
+                                <video controls><source src="${mediaContent}" type="video/mp4"></video>
+                            </div>${content}`;
+                        } else if (fileType.includes('AUDIO') || 
+                                 ['mp3', 'ogg', 'wav', 'opus'].includes(extension)) {
+                            content = `<div class="media-container">
+                                <audio controls><source src="${mediaContent}" type="audio/ogg"></audio>
+                            </div>${content}`;
+                        }
+                    } else if (mediaContent.type === 'text') {
+                        // Tekstbestand
+                        content = `<div class="media-container text-file">
+                            <div class="text-file-content">
+                                <pre>${escapeHtml(mediaContent.content)}</pre>
+                            </div>
+                        </div>${content}`;
+                    }
+                } else {
+                    content = `<div class="media-container">
+                        <p>Bestand niet gevonden: ${fileName}</p>
+                    </div>${content}`;
+                }
+            }
+            
+            div.innerHTML = `
+                <div class="message-header">
+                    <span class="message-sender">${message.sender}</span>
+                    <span class="message-time">${message.time}</span>
+                </div>
+                <div class="message-content">${content}</div>
+            `;
+            
+            return div;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            const [day, month, year] = dateStr.split('-');
+            const date = new Date(year, month - 1, day);
+            return date.toLocaleDateString('nl-NL', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            });
+        }
+    </script>
+</body>
+</html> 
